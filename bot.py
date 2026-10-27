@@ -29,9 +29,6 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # CECI S'AFFICHERA QUEL QUE SOIT LE SALON
-    print(f"[TEST GLOBAL] Message de {message.author} dans le salon {message.channel.id} : {message.content}")
-
     if message.author == client.user or message.channel.id != CHANNEL_ID:
         return
 
@@ -52,8 +49,9 @@ async def on_message(message):
                 break
 
         if member:
-            await message.channel.send(f"/add-money user:<@{member.id}> amount:1")
-            print(f"[Succès] 1 point crédité à {member.name}")
+            # Envoi de la commande avec le préfixe textuel d'UnbelievaBoat (essaie avec ! ou ?)
+            await message.channel.send(f"!add-money <@{member.id}> 1")
+            print(f"[Succès] Commande d'ajout de coins envoyée pour {member.name}")
         else:
             print(f"[Erreur] Membre non trouvé pour : {voter_name}")
 
