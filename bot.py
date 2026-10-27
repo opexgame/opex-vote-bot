@@ -3,7 +3,6 @@ import threading
 from flask import Flask
 import discord
 
-# --- 1. Petit serveur Web pour satisfaire Render ---
 app = Flask('')
 
 @app.route('/')
@@ -16,13 +15,12 @@ def run_flask():
 
 threading.Thread(target=run_flask, daemon=True).start()
 
-# --- 2. Logique du Bot Discord ---
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True # Indispensable pour chercher les membres par leur nom
+intents.members = True
 client = discord.Client(intents=intents)
 
 @client.event
@@ -31,35 +29,32 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    if message.channel.id != CHANNEL_ID or message.author == client.user:
+    # CECI S'AFFICHERA QUEL QUE SOIT LE SALON
+    print(f"[TEST GLOBAL] Message de {message.author} dans le salon {message.channel.id} : {message.content}")
+
+    if message.author == client.user or message.channel.id != CHANNEL_ID:
         return
 
+    content = message.content.strip()
     voter_name = None
 
-    # Analyse du texte brut (ex: "Max vient de voter pour le server !")
-    content = message.content
-    if "vient de voter pour le server" in content:
-        # On extrait le premier mot qui correspond au pseudo
+    if "vient de voter pour le serveur" in content.lower():
         parts = content.split(" vient de voter")
         if parts:
             voter_name = parts[0].strip()
 
-    # Si on a trouvé un pseudo, on cherche le membre correspondant sur le serveur
     if voter_name:
         guild = message.guild
-        member = discord.utils.get(guild.members, name=voter_name)
-        
-        # Si on ne le trouve pas par son pseudo exact, on cherche par son pseudo affiché (display_name)
-        if not member:
-            for m in guild.members:
-                if m.display_name.lower() == voter_name.lower() or m.name.lower() == voter_name.lower():
-                    member = m
-                    break
+        member = None
+        for m in guild.members:
+            if m.name.lower() == voter_name.lower() or m.display_name.lower() == voter_name.lower():
+                member = m
+                break
 
         if member:
             await message.channel.send(f"/add-money user:<@{member.id}> amount:1")
-            print(f"[Succès] 1 point crédité à {member.name} (ID : {member.id})")
+            print(f"[Succès] 1 point crédité à {member.name}")
         else:
-            print(f"[Erreur] Impossible de trouver le membre correspondant au nom : {voter_name}")
+            print(f"[Erreur] Membre non trouvé pour : {voter_name}")
 
 client.run(TOKEN)
