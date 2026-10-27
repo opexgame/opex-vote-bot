@@ -1,10 +1,25 @@
 import os
 import re
+import threading
+from flask import Flask
 import discord
 
-# Récupération sécurisée des paramètres
+# --- 1. Petit serveur Web pour satisfaire Render ---
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot Discord actif !"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host='0.0.0.0', port=port)
+
+# Lancement du serveur Web dans un thread séparé
+threading.Thread(target=run_flask, daemon=True).start()
+
+# --- 2. Logique du Bot Discord ---
 TOKEN = os.getenv("DISCORD_TOKEN")
-# Remplace 123456789012345678 par l'ID réel de ton salon #vote-serveur
 CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 
 intents = discord.Intents.default()
@@ -17,18 +32,17 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-    # On filtre : salon spécifique uniquement + ignorer les messages du bot lui-même
     if message.channel.id != CHANNEL_ID or message.author == client.user:
         return
 
     user_id = None
 
-    # 1. Recherche d'une mention dans le texte brut du message (<@12345678>)
+    # Recherche d'une mention dans le texte brut
     match = re.search(r"<@!?(\d+)>", message.content)
     if match:
         user_id = match.group(1)
 
-    # 2. Si pas de mention dans le texte, recherche dans les Embeds (notifications de Webhook)
+    # Recherche dans les Embeds (webhook)
     if not user_id and message.embeds:
         for embed in message.embeds:
             search_text = f"{embed.title or ''} {embed.description or ''}"
@@ -40,7 +54,7 @@ async def on_message(message):
                 user_id = match.group(1)
                 break
 
-    # 3. Exécution de la commande d'ajout de point via UnbelievaBoat
+    # Exécution de la commande UnbelievaBoat
     if user_id:
         await message.channel.send(f"/add-money user:<@{user_id}> amount:1")
         print(f"[Succès] 1 point crédité à l'utilisateur ID : {user_id}")
