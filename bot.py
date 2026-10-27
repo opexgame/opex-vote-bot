@@ -1,5 +1,4 @@
 import os
-import re
 import threading
 from flask import Flask
 import discord
@@ -15,7 +14,6 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Lancement du serveur Web dans un thread séparé
 threading.Thread(target=run_flask, daemon=True).start()
 
 # --- 2. Logique du Bot Discord ---
@@ -24,6 +22,7 @@ CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True # Indispensable pour chercher les membres par leur nom
 client = discord.Client(intents=intents)
 
 @client.event
@@ -35,28 +34,32 @@ async def on_message(message):
     if message.channel.id != CHANNEL_ID or message.author == client.user:
         return
 
-    user_id = None
+    voter_name = None
 
-    # Recherche d'une mention dans le texte brut
-    match = re.search(r"<@!?(\d+)>", message.content)
-    if match:
-        user_id = match.group(1)
+    # Analyse du texte brut (ex: "Max vient de voter pour le server !")
+    content = message.content
+    if "vient de voter pour le server" in content:
+        # On extrait le premier mot qui correspond au pseudo
+        parts = content.split(" vient de voter")
+        if parts:
+            voter_name = parts[0].strip()
 
-    # Recherche dans les Embeds (webhook)
-    if not user_id and message.embeds:
-        for embed in message.embeds:
-            search_text = f"{embed.title or ''} {embed.description or ''}"
-            for field in embed.fields:
-                search_text += f" {field.name} {field.value}"
-            
-            match = re.search(r"<@!?(\d+)>", search_text)
-            if match:
-                user_id = match.group(1)
-                break
+    # Si on a trouvé un pseudo, on cherche le membre correspondant sur le serveur
+    if voter_name:
+        guild = message.guild
+        member = discord.utils.get(guild.members, name=voter_name)
+        
+        # Si on ne le trouve pas par son pseudo exact, on cherche par son pseudo affiché (display_name)
+        if not member:
+            for m in guild.members:
+                if m.display_name.lower() == voter_name.lower() or m.name.lower() == voter_name.lower():
+                    member = m
+                    break
 
-    # Exécution de la commande UnbelievaBoat
-    if user_id:
-        await message.channel.send(f"/add-money user:<@{user_id}> amount:1")
-        print(f"[Succès] 1 point crédité à l'utilisateur ID : {user_id}")
+        if member:
+            await message.channel.send(f"/add-money user:<@{member.id}> amount:1")
+            print(f"[Succès] 1 point crédité à {member.name} (ID : {member.id})")
+        else:
+            print(f"[Erreur] Impossible de trouver le membre correspondant au nom : {voter_name}")
 
 client.run(TOKEN)
