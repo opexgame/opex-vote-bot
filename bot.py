@@ -54,8 +54,8 @@ async def on_message(message):
                 break
 
         if member:
-            # Utilisation de member.mention pour envoyer une vraie mention cliquable et valide
-            await message.channel.send(f"!add-money cash {member.mention} 1")
+            # Envoi de la commande avec l'ID direct du membre que UnbelievaBoat analyse sans erreur
+            await message.channel.send(f"!add-money cash {member.id} 1")
             print(f"[Succès] 1 coin crédité en cash pour {member.name}")
         else:
             print(f"[Erreur] Membre non trouvé pour : {voter_name}")
