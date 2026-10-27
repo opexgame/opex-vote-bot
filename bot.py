@@ -17,9 +17,11 @@ def run_flask():
 threading.Thread(target=run_flask, daemon=True).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-# Jeton UnbelievaBoat intégré directement
+# Jeton UnbelievaBoat d'API
 UNBELIEVABOAT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiIxNTY0NzMzNDk1OTU4NDQwOTY5IiwiaWF0IjoxNzkzMTMxOTM2fQ.CnSGo8M2HTJXwhrZWS9iZJ9-VI3_C9t5HK-TVgVJUK8"
-GUILD_ID = os.getenv("GUILD_ID")  # ID de ton serveur Discord
+
+# ID de ton serveur Discord OPEX Wardogs & Squad
+GUILD_ID = os.getenv("GUILD_ID", "1504495864503210006")
 CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 
 intents = discord.Intents.default()
@@ -41,7 +43,9 @@ async def add_money_unbelievaboat(user_id: int, amount: int = 1):
 
     async with aiohttp.ClientSession() as session:
         async with session.patch(url, json=payload, headers=headers) as resp:
-            return resp.status == 200
+            text = await resp.text()
+            print(f"[API Response] Status: {resp.status} | Body: {text}")
+            return resp.status == 200, text
 
 @client.event
 async def on_ready():
@@ -69,11 +73,11 @@ async def on_message(message):
                     break
 
             if member:
-                success = await add_money_unbelievaboat(member.id, 1)
+                success, error_text = await add_money_unbelievaboat(member.id, 1)
                 if success:
                     await message.channel.send(f"✅ 1 coin ajouté sur le shop UnbelievaBoat pour {member.mention} !")
                 else:
-                    await message.channel.send(f"⚠️ Erreur de l'API UnbelievaBoat pour {member.mention}.")
+                    await message.channel.send(f"⚠️ Erreur API ({error_text}) pour {member.mention}.")
             else:
                 print(f"[Erreur] Membre non trouvé pour : {voter_name}")
 
