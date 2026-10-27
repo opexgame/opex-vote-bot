@@ -54,8 +54,8 @@ async def on_message(message):
                 break
 
         if member:
-            # On utilise directement le nom d'affichage ou la mention propre pour correspondre au test réussi
-            await message.channel.send(f"!add-money cash <@{member.id}> 1")
+            # Utilisation de member.mention pour envoyer une vraie mention cliquable et valide
+            await message.channel.send(f"!add-money cash {member.mention} 1")
             print(f"[Succès] 1 coin crédité en cash pour {member.name}")
         else:
             print(f"[Erreur] Membre non trouvé pour : {voter_name}")
