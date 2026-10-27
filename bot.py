@@ -13,6 +13,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
+# Lancement de Flask en arrière-plan pour garder Render en vie
 threading.Thread(target=run_flask, daemon=True).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -21,6 +22,7 @@ CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+
 client = discord.Client(intents=intents)
 
 @client.event
@@ -29,12 +31,14 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
+    # Ignore les messages du bot lui-même ou ceux qui ne sont pas dans le salon de vote
     if message.author == client.user or message.channel.id != CHANNEL_ID:
         return
 
     content = message.content.strip()
     voter_name = None
 
+    # Détection du message de vote Top-Serveurs
     if "vient de voter pour le serveur" in content.lower():
         parts = content.split(" vient de voter")
         if parts:
@@ -44,14 +48,15 @@ async def on_message(message):
         guild = message.guild
         member = None
         for m in guild.members:
-            if m.name.lower() == voter_name.lower() or m.display_name.lower() == voter_name.lower():
+            if (m.name.lower() == voter_name.lower() or 
+                m.display_name.lower() == voter_name.lower()):
                 member = m
                 break
 
         if member:
-            # Envoi de la commande sous le format de texte direct avec tiret
-            await message.channel.send(f"!add-money <@{member.id}> 1")
-            print(f"[Succès] Commande envoyée pour {member.name}")
+            # Envoi de la commande textuelle correcte avec cash, le membre et le montant de 1 coin
+            await message.channel.send(f"!add-money cash <@{member.id}> 1")
+            print(f"[Succès] 1 coin crédité en cash pour {member.name}")
         else:
             print(f"[Erreur] Membre non trouvé pour : {voter_name}")
 
