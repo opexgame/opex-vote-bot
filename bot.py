@@ -50,7 +50,7 @@ async def on_message(message):
 
         if member:
             # Envoi de la commande sous le format de texte direct avec tiret
-            await message.channel.send(f"/add-money <@{member.id}> 1")
+            await message.channel.send(f"!add-money <@{member.id}> 1")
             print(f"[Succès] Commande envoyée pour {member.name}")
         else:
             print(f"[Erreur] Membre non trouvé pour : {voter_name}")
