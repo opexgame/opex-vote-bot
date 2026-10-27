@@ -13,7 +13,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# Lancement de Flask en arrière-plan pour garder Render en vie
+# Lancement de Flask en arrière-plan pour garder Render en ligne
 threading.Thread(target=run_flask, daemon=True).start()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -54,7 +54,7 @@ async def on_message(message):
                 break
 
         if member:
-            # Envoi de la commande textuelle correcte avec cash, le membre et le montant de 1 coin
+            # On utilise directement le nom d'affichage ou la mention propre pour correspondre au test réussi
             await message.channel.send(f"!add-money cash <@{member.id}> 1")
             print(f"[Succès] 1 coin crédité en cash pour {member.name}")
         else:
