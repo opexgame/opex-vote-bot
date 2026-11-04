@@ -9,27 +9,27 @@ from discord.ui import Button, View
 from flask import Flask
 
 # Serveur Flask pour maintenir le bot actif sur Render
-app = Flask('')
+app = Flask("")
 
 
-@app.route('/')
+@app.route("/")
 def home():
   return "Bot Discord actif !"
 
 
 def run_flask():
-  port = int(os.environ.get('PORT', 10000))
-  app.run(host='0.0.0.0', port=port)
+  port = int(os.environ.get("PORT", 10000))
+  app.run(host="0.0.0.0", port=port)
 
 
 threading.Thread(target=run_flask, daemon=True).start()
 
 # Configurations
-TOKEN = os.getenv('DISCORD_TOKEN')
+TOKEN = os.getenv("DISCORD_TOKEN")
 UNBELIEVABOAT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBfaWQiOiIxNTY0NzMzNDk1OTU4NDQwOTY5IiwiaWF0IjoxNzkzMTMxOTM2fQ.CnSGo8M2HTJXwhrZWS9iZJ9-VI3_C9t5HK-TVgVJUK8"
 
-GUILD_ID = os.getenv('GUILD_ID', '1504495864503210006')
-VOTE_CHANNEL_ID = int(os.getenv('VOTE_CHANNEL_ID', '1558847340738252810'))
+GUILD_ID = os.getenv("GUILD_ID", "1504495864503210006")
+VOTE_CHANNEL_ID = int(os.getenv("VOTE_CHANNEL_ID", "1558847340738252810"))
 WELCOME_CHANNEL_ID = 1504496160918732800
 
 intents = discord.Intents.default()
@@ -41,7 +41,7 @@ client = discord.Client(intents=intents)
 
 def get_current_vote_reward() -> int:
   """Retourne 2 pièces du vendredi 19h au dimanche minuit (heure française), sinon 1 pièce."""
-  now = datetime.now(ZoneInfo('Europe/Paris'))
+  now = datetime.now(ZoneInfo("Europe/Paris"))
   weekday = now.weekday()
 
   if weekday == 4 and now.hour >= 19:
@@ -53,19 +53,19 @@ def get_current_vote_reward() -> int:
 
 async def add_money_unbelievaboat(user_id: int, amount: int = 1):
   """Crédite le solde et récupère le nouveau solde cash."""
-  url = f'https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}'
+  url = f"https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}"
   headers = {
-      'Authorization': UNBELIEVABOAT_TOKEN,
-      'Content-Type': 'application/json',
+      "Authorization": UNBELIEVABOAT_TOKEN,
+      "Content-Type": "application/json",
   }
-  payload = {'cash': amount}
+  payload = {"cash": amount}
 
   async with aiohttp.ClientSession() as session:
     async with session.patch(url, json=payload, headers=headers) as resp:
       if resp.status == 200:
         try:
           data = await resp.json()
-          new_cash = data.get('cash', None)
+          new_cash = data.get("cash", None)
           return True, new_cash, None
         except Exception:
           return True, None, None
@@ -87,9 +87,9 @@ class AirdropView(View):
     self.claimed = False
 
   @discord.ui.button(
-      label='Ouvrir le coffre ! 🎁',
+      label="Ouvrir le coffre ! 🎁",
       style=discord.ButtonStyle.success,
-      custom_id='claim_airdrop',
+      custom_id="claim_airdrop",
   )
   async def claim_button(
       self, interaction: discord.Interaction, button: Button
@@ -104,20 +104,18 @@ class AirdropView(View):
     self.claimed = True
     user = interaction.user
 
-    # Crédite 5 pièces à l'utilisateur
     success, new_balance, error_text = await add_money_unbelievaboat(
         user.id, self.reward_amount
     )
 
-    # Désactive le bouton
     button.disabled = True
-    button.label = f'Récupéré par {user.display_name} !'
+    button.label = f"Récupéré par {user.display_name} !"
     button.style = discord.ButtonStyle.secondary
     await interaction.message.edit(view=self)
 
     if success:
       embed = discord.Embed(
-          title='🎉 Coffre Ouvert !',
+          title="🎉 Coffre Ouvert !",
           description=(
               f"Félicitations {user.mention} !\n\nTu as été le plus rapide et"
               f" tu remportes **+{self.reward_amount} coin(s)** !"
@@ -126,22 +124,21 @@ class AirdropView(View):
       )
       if new_balance is not None:
         embed.add_field(
-            name='💰 Nouveau Solde',
-            value=f'**{new_balance}** pièces',
+            name="💰 Nouveau Solde",
+            value=f"**{new_balance}** pièces",
             inline=False,
         )
       embed.set_footer(
-          text='Opex Wardogs & Squad • Drop Mystère',
+          text="Opex Wardogs & Squad • Drop Mystère",
           icon_url=self.server_icon_url,
       )
 
-      # Notification discrète à celui qui clique
       await interaction.response.send_message(
-          "✅ Coffre ouvert ! L'annonce a été envoyée dans le salon vote.",
+          "✅ Tu as ouvert le coffre avec succès ! L'annonce a été envoyée"
+          " dans le salon vote.",
           ephemeral=True,
       )
 
-      # Envoi du message public d'annonce dans le salon #vote-serveur
       vote_channel = interaction.client.get_channel(self.vote_channel_id)
       if vote_channel:
         await vote_channel.send(embed=embed)
@@ -149,13 +146,13 @@ class AirdropView(View):
         await interaction.channel.send(embed=embed)
     else:
       await interaction.response.send_message(
-          f'⚠️ Erreur lors du crédit des pièces : {error_text}', ephemeral=True
+          f"⚠️ Erreur lors du crédit des pièces : {error_text}", ephemeral=True
       )
 
 
 @client.event
 async def on_ready():
-  print(f'Bot connecté et prêt : {client.user}')
+  print(f"Bot connecté et prêt : {client.user}")
 
 
 @client.event
@@ -167,9 +164,9 @@ async def on_message(message):
   if message.embeds:
     for embed in message.embeds:
       if embed.description:
-        full_text += ' ' + embed.description
+        full_text += " " + embed.description
       if embed.title:
-        full_text += ' ' + embed.title
+        full_text += " " + embed.title
 
   guild = message.guild
   server_icon = guild.icon.url if guild and guild.icon else None
@@ -177,18 +174,18 @@ async def on_message(message):
   # ==========================================
   # COMMANDE DE TEST FORCEE : !testdrop
   # ==========================================
-  if full_text.lower() == '!testdrop':
+  if full_text.lower() == "!testdrop":
     airdrop_embed = discord.Embed(
-        title='📦 UN COFFRE MYSTÈRE EST APPARU ! [TEST]',
+        title="📦 UN COFFRE MYSTÈRE EST APPARU ! [TEST]",
         description=(
-            'Un parachutage de ravitaillement vient de tomber dans le chat'
-            ' !\n\nClique vite sur le bouton ci-dessous pour récupérer **5'
-            ' pièce(s)** !'
+            "Un parachutage de ravitaillement vient de tomber dans le chat"
+            " !\n\nClique vite sur le bouton ci-dessous pour récupérer **5"
+            " pièce(s)** !"
         ),
         color=discord.Color.purple(),
     )
     airdrop_embed.set_footer(
-        text='Opex Wardogs & Squad • Drop Aléatoire', icon_url=server_icon
+        text="Opex Wardogs & Squad • Drop Aléatoire", icon_url=server_icon
     )
 
     view = AirdropView(
@@ -203,10 +200,10 @@ async def on_message(message):
   # 1. GESTION DES VOTES (Top-Serveurs)
   # ==========================================
   if message.channel.id == VOTE_CHANNEL_ID:
-    if 'vient de voter pour le serveur' in full_text.lower():
-      parts = full_text.split(' vient de voter')
+    if "vient de voter pour le serveur" in full_text.lower():
+      parts = full_text.split(" vient de voter")
       if parts:
-        voter_raw = parts[0].replace('@', '').strip()
+        voter_raw = parts[0].replace("@", "").strip()
         member = None
 
         if message.mentions:
@@ -229,42 +226,42 @@ async def on_message(message):
 
           if success:
             embed = discord.Embed(
-                title='🪙 Récompense de Vote Validée !',
+                title="🪙 Récompense de Vote Validée !",
                 description=(
                     f"Merci {member.mention} d'avoir voté pour le"
-                    f' serveur !\n\n✅ **+{reward_amount} coin(s)** ajoutés sur'
-                    ' ton compte.'
+                    f" serveur !\n\n✅ **+{reward_amount} coin(s)** ajoutés sur"
+                    " ton compte."
                 ),
                 color=discord.Color.green(),
             )
             if new_balance is not None:
               embed.add_field(
-                  name='💰 Nouveau Solde',
-                  value=f'**{new_balance}** pièces',
+                  name="💰 Nouveau Solde",
+                  value=f"**{new_balance}** pièces",
                   inline=False,
               )
             embed.set_footer(
-                text='Opex Wardogs & Squad • Système de Vote',
+                text="Opex Wardogs & Squad • Système de Vote",
                 icon_url=server_icon,
             )
 
             await message.channel.send(embed=embed)
           else:
             await message.channel.send(
-                f'⚠️ Erreur API Vote ({error_text}) pour {member.mention}.'
+                f"⚠️ Erreur API Vote ({error_text}) pour {member.mention}."
             )
         else:
-          print(f'[Erreur Vote] Membre non trouvé pour : {voter_raw}')
+          print(f"[Erreur Vote] Membre non trouvé pour : {voter_raw}")
 
   # ==========================================
   # 2. GESTION DES INVITATIONS (Invite Tracker)
   # ==========================================
-  if 'has been invited by' in full_text.lower():
+  if "has been invited by" in full_text.lower():
     try:
-      parts_split = full_text.split('has been invited by')
+      parts_split = full_text.split("has been invited by")
       left_part = parts_split[0].strip()
       right_part = parts_split[1].strip()
-      inviter_raw = right_part.split('and has now')[0].strip()
+      inviter_raw = right_part.split("and has now")[0].strip()
 
       invited_member = None
       if message.mentions:
@@ -272,10 +269,10 @@ async def on_message(message):
 
       if not invited_member:
         clean_invited = (
-            left_part.replace('<@', '')
-            .replace('>', '')
-            .replace('!', '')
-            .replace('@', '')
+            left_part.replace("<@", "")
+            .replace(">", "")
+            .replace("!", "")
+            .replace("@", "")
             .strip()
         )
         for m in guild.members:
@@ -301,10 +298,10 @@ async def on_message(message):
 
       if not inviter_member:
         clean_inviter = (
-            inviter_raw.replace('<@', '')
-            .replace('>', '')
-            .replace('!', '')
-            .replace('@', '')
+            inviter_raw.replace("<@", "")
+            .replace(">", "")
+            .replace("!", "")
+            .replace("@", "")
             .strip()
         )
         for m in guild.members:
@@ -330,18 +327,18 @@ async def on_message(message):
           )
 
           embed = discord.Embed(
-              title='🎉 Nouveau Membre Invité !',
+              title="🎉 Nouveau Membre Invité !",
               description=(
-                  f'Bien joué {inviter_member.mention} !\n\n✅ **+{invite_reward}'
-                  f' coin(s)** ajoutés pour l'invitation de'
-                  f' {invited_text}.\n👋 Bienvenue à lui !'
+                  f"Bien joué {inviter_member.mention} !\n\n✅ **+{invite_reward}"
+                  f" coin(s)** ajoutés pour l'invitation de"
+                  f" {invited_text}.\n👋 Bienvenue à lui !"
               ),
               color=discord.Color.gold(),
           )
           if new_balance is not None:
             embed.add_field(
                 name="💰 Nouveau Solde de l'inviteur",
-                value=f'**{new_balance}** pièces',
+                value=f"**{new_balance}** pièces",
                 inline=False,
             )
           embed.set_footer(
@@ -351,12 +348,12 @@ async def on_message(message):
 
           await target_channel.send(embed=embed)
         else:
-          print(f'[Erreur API Invite] {error_text}')
+          print(f"[Erreur API Invite] {error_text}")
       else:
-        print(f'[Erreur Invite] Inviteur non trouvé : {inviter_raw}')
+        print(f"[Erreur Invite] Inviteur non trouvé : {inviter_raw}")
 
     except Exception as e:
-      print(f'[Erreur Parsing Invite] {e}')
+      print(f"[Erreur Parsing Invite] {e}")
 
   # ==========================================
   # 3. SYSTEME D'AIRDROP ALEATOIRE (5% de chance)
@@ -364,16 +361,16 @@ async def on_message(message):
   if message.channel.id != VOTE_CHANNEL_ID and not message.author.bot:
     if random.randint(1, 100) <= 5:
       airdrop_embed = discord.Embed(
-          title='📦 UN COFFRE MYSTÈRE EST APPARU !',
+          title="📦 UN COFFRE MYSTÈRE EST APPARU !",
           description=(
-              'Un parachutage de ravitaillement vient de tomber dans le chat'
-              ' !\n\nClique vite sur le bouton ci-dessous pour récupérer **5'
-              ' pièce(s)** !'
+              "Un parachutage de ravitaillement vient de tomber dans le chat"
+              " !\n\nClique vite sur le bouton ci-dessous pour récupérer **5"
+              " pièce(s)** !"
           ),
           color=discord.Color.purple(),
       )
       airdrop_embed.set_footer(
-          text='Opex Wardogs & Squad • Drop Aléatoire', icon_url=server_icon
+          text="Opex Wardogs & Squad • Drop Aléatoire", icon_url=server_icon
       )
 
       view = AirdropView(
