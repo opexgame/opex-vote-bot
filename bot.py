@@ -90,6 +90,9 @@ async def on_message(message):
       if embed.title:
         full_text += " " + embed.title
 
+  guild = message.guild
+  server_icon = guild.icon.url if guild and guild.icon else None
+
   # ==========================================
   # 1. GESTION DES VOTES (Top-Serveurs)
   # ==========================================
@@ -98,7 +101,6 @@ async def on_message(message):
       parts = full_text.split(" vient de voter")
       if parts:
         voter_raw = parts[0].replace("@", "").strip()
-        guild = message.guild
         member = None
 
         if message.mentions:
@@ -120,7 +122,6 @@ async def on_message(message):
           )
 
           if success:
-            # Création d'un beau Embed stylisé
             embed = discord.Embed(
                 title="🪙 Récompense de Vote Validée !",
                 description=(
@@ -136,7 +137,11 @@ async def on_message(message):
                   value=f"**{new_balance}** pièces",
                   inline=False,
               )
-            embed.set_footer(text="Opex Wardogs & Squad • Système de Vote")
+            # Ajout du logo du serveur en bas à droite du footer
+            embed.set_footer(
+                text="Opex Wardogs & Squad • Système de Vote",
+                icon_url=server_icon,
+            )
 
             await message.channel.send(embed=embed)
           else:
@@ -154,7 +159,6 @@ async def on_message(message):
       part = full_text.split("has been invited by")[1]
       inviter_raw = part.split("and has now")[0].strip()
 
-      guild = message.guild
       inviter_member = None
 
       if message.mentions:
@@ -193,13 +197,11 @@ async def on_message(message):
         target_channel = cmd_channel if cmd_channel else message.channel
 
         if success:
-          # Beau Embed stylisé pour l'invitation
           embed = discord.Embed(
               title="🎉 Nouveau Membre Invité !",
               description=(
                   f"Bien joué {inviter_member.mention} !\n\n✅ **+{invite_reward}"
-                    " coin(s)** ajoutés pour l'invitation d'un nouveau"
-                  " joueur."
+                  " coin(s)** ajoutés pour l'invitation d'un nouveau joueur."
               ),
               color=discord.Color.gold(),
           )
@@ -209,8 +211,10 @@ async def on_message(message):
                 value=f"**{new_balance}** pièces",
                 inline=False,
             )
+          # Ajout du logo du serveur en bas à droite du footer
           embed.set_footer(
-              text="Opex Wardogs & Squad • Système d'Invitation"
+              text="Opex Wardogs & Squad • Système d'Invitation",
+              icon_url=server_icon,
           )
 
           await target_channel.send(embed=embed)
