@@ -37,18 +37,25 @@ client = discord.Client(intents=intents)
 
 
 def get_current_reward() -> int:
-  """MODIFICATION TEMPORAIRE POUR TESTER LES 2 PIÈCES"""
-  return 2  # On force le bot à donner 2 pièces pour ton test
+  """Vérifie si on est entre vendredi 19h et dimanche minuit (heure française).
 
-  # Le reste de la fonction est mis en pause tant que le return 2 est ici
+  Si oui, retourne 2 pièces, sinon 1 pièce.
+  """
   now = datetime.now(ZoneInfo("Europe/Paris"))
-  weekday = now.weekday()
+  weekday = now.weekday()  # 0=Lundi, ..., 4=Vendredi, 5=Samedi, 6=Dimanche
+
+  # Vendredi à partir de 19h00
   if weekday == 4 and now.hour >= 19:
     return 2
+
+  # Samedi entier
   if weekday == 5:
     return 2
+
+  # Dimanche entier (jusqu'à dimanche 23h59 / minuit)
   if weekday == 6:
     return 2
+
   return 1
 
 
