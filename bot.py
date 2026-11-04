@@ -1,18 +1,23 @@
+from datetime import datetime
 import os
 import threading
 import aiohttp
 from flask import Flask
 import discord
+from zoneinfo import ZoneInfo
 
 app = Flask('')
 
+
 @app.route('/')
 def home():
-    return "Bot Discord actif !"
+  return "Bot Discord actif !"
+
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+  port = int(os.environ.get("PORT", 10000))
+  app.run(host='0.0.0.0', port=port)
+
 
 threading.Thread(target=run_flask, daemon=True).start()
 
@@ -30,55 +35,92 @@ intents.members = True
 
 client = discord.Client(intents=intents)
 
-async def add_money_unbelievaboat(user_id: int, amount: int = 1):
-    """Ajoute de l'argent cash via l'API officielle d'UnbelievaBoat"""
-    url = f"https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}"
-    headers = {
-        "Authorization": UNBELIEVABOAT_TOKEN,
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "cash": amount
-    }
 
-    async with aiohttp.ClientSession() as session:
-        async with session.patch(url, json=payload, headers=headers) as resp:
-            text = await resp.text()
-            print(f"[API Response] Status: {resp.status} | Body: {text}")
-            return resp.status == 200, text
+def get_current_reward() -> int:
+  """Vérifie si on est entre vendredi 19h et dimanche minuit (heure française).
+
+  Si oui, retourne 2 pièces, sinon 1 pièce.
+  """
+  now = datetime.now(ZoneInfo("Europe/Paris"))
+  weekday = now.weekday()  # 0=Lundi, ..., 4=Vendredi, 5=Samedi, 6=Dimanche
+
+  # Vendredi à partir de 19h00
+  if weekday == 4 and now.hour >= 19:
+    return 2
+
+  # Samedi entier
+  if weekday == 5:
+    return 2
+
+  # Dimanche entier (jusqu'à dimanche 23h59 / minuit)
+  if weekday == 6:
+    return 2
+
+  return 1
+
+
+async def add_money_unbelievaboat(user_id: int, amount: int = 1):
+  """Ajoute de l'argent cash via l'API officielle d'UnbelievaBoat"""
+  url = f'https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}'
+  headers = {
+      'Authorization': UNBELIEVABOAT_TOKEN,
+      'Content-Type': 'application/json',
+  }
+  payload = {'cash': amount}
+
+  async with aiohttp.ClientSession() as session:
+    async with session.patch(url, json=payload, headers=headers) as resp:
+      text = await resp.text()
+      print(f'[API Response] Status: {resp.status} | Body: {text}')
+      return resp.status == 200, text
+
 
 @client.event
 async def on_ready():
-    print(f"Bot connecté sous l'identité : {client.user}")
+  print(f"Bot connecté sous l'identité : {client.user}")
+
 
 @client.event
 async def on_message(message):
-    if message.author == client.user or message.channel.id != CHANNEL_ID:
-        return
+  if message.author == client.user or message.channel.id != CHANNEL_ID:
+    return
 
-    content = message.content.strip()
+  content = message.content.strip()
 
-    # Détection du message de vote Top-Serveurs
-    if "vient de voter pour le serveur" in content.lower():
-        parts = content.split(" vient de voter")
-        if parts:
-            voter_name = parts[0].strip()
-            guild = message.guild
-            member = None
-            
-            for m in guild.members:
-                if (m.name.lower() == voter_name.lower() or 
-                    m.display_name.lower() == voter_name.lower()):
-                    member = m
-                    break
+  # Détection du message de vote Top-Serveurs
+  if 'vient de voter pour le serveur' in content.lower():
+    parts = content.split(' vient de voter')
+    if parts:
+      voter_name = parts[0].strip()
+      guild = message.guild
+      member = None
 
-            if member:
-                success, error_text = await add_money_unbelievaboat(member.id, 1)
-                if success:
-                    await message.channel.send(f"✅ 1 coin ajouté sur le shop UnbelievaBoat pour {member.mention} !")
-                else:
-                    await message.channel.send(f"⚠️ Erreur API ({error_text}) pour {member.mention}.")
-            else:
-                print(f"[Erreur] Membre non trouvé pour : {voter_name}")
+      for m in guild.members:
+        if (
+            m.name.lower() == voter_name.lower()
+            or m.display_name.lower() == voter_name.lower()
+        ):
+          member = m
+          break
+
+      if member:
+        # Calcul dynamique de la récompense (2 pièces le week-end, 1 le reste du temps)
+        reward_amount = get_current_reward()
+
+        success, error_text = await add_money_unbelievaboat(
+            member.id, reward_amount
+        )
+        if success:
+          await message.channel.send(
+              f'✅ {reward_amount} coin(s) ajouté(s) sur le shop'
+              f' UnbelievaBoat pour {member.mention} !'
+          )
+        else:
+          await message.channel.send(
+              f'⚠️ Erreur API ({error_text}) pour {member.mention}.'
+          )
+      else:
+        print(f'[Erreur] Membre non trouvé pour : {voter_name}')
+
 
 client.run(TOKEN)
