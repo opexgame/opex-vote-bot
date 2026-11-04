@@ -86,7 +86,7 @@ async def add_money_unbelievaboat(user_id: int, amount: int = 1):
         return False, None, text
 
 
-# Class pour la sélection de faction (Équipes) avec bouton de rafraîchissement et verrouillage
+# Class pour la sélection de faction (Équipes) avec bouton compact et verrouillage
 class TeamSelectionView(View):
 
   def __init__(self, server_icon_url: str):
@@ -211,7 +211,7 @@ class TeamSelectionView(View):
     await self.process_team_join(interaction, "Bleu")
 
   @discord.ui.button(
-      label="🔄", style=discord.ButtonStyle.secondary, custom_id="refresh_teams"
+      emoji="🔄", style=discord.ButtonStyle.secondary, custom_id="refresh_teams"
   )
   async def btn_refresh(self, interaction: discord.Interaction, button: Button):
     await interaction.response.defer(ephemeral=True)
