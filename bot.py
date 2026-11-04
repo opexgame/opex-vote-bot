@@ -137,7 +137,6 @@ async def on_message(message):
                   value=f"**{new_balance}** pièces",
                   inline=False,
               )
-            # Ajout du logo du serveur en bas à droite du footer
             embed.set_footer(
                 text="Opex Wardogs & Squad • Système de Vote",
                 icon_url=server_icon,
@@ -156,14 +155,40 @@ async def on_message(message):
   # ==========================================
   if "has been invited by" in full_text.lower():
     try:
-      part = full_text.split("has been invited by")[1]
-      inviter_raw = part.split("and has now")[0].strip()
+      # On découpe le message pour séparer le nouveau membre et l'inviteur
+      parts_split = full_text.split("has been invited by")
+      left_part = parts_split[0].strip()  # Nouveau membre
+      right_part = parts_split[1].strip()  # Inviteur + le reste
+      inviter_raw = right_part.split("and has now")[0].strip()
 
-      inviter_member = None
-
+      # Récupération du nouveau membre (invité)
+      invited_member = None
       if message.mentions:
-        for mention in message.mentions:
+        invited_member = message.mentions[0]
+
+      if not invited_member:
+        clean_invited = (
+            left_part.replace("<@", "")
+            .replace(">", "")
+            .replace("!", "")
+            .replace("@", "")
+            .strip()
+        )
+        for m in guild.members:
           if (
+              m.name.lower() == clean_invited.lower()
+              or m.display_name.lower() == clean_invited.lower()
+          ):
+            invited_member = m
+            break
+
+      # Récupération de l'inviteur
+      inviter_member = None
+      if len(message.mentions) > 1:
+        for mention in message.mentions:
+          if mention.id != (
+              invited_member.id if invited_member else None
+          ) and (
               mention.name.lower() in inviter_raw.lower()
               or mention.display_name.lower() in inviter_raw.lower()
               or str(mention.id) in inviter_raw
@@ -172,7 +197,7 @@ async def on_message(message):
             break
 
       if not inviter_member:
-        clean_name = (
+        clean_inviter = (
             inviter_raw.replace("<@", "")
             .replace(">", "")
             .replace("!", "")
@@ -181,8 +206,8 @@ async def on_message(message):
         )
         for m in guild.members:
           if (
-              m.name.lower() == clean_name.lower()
-              or m.display_name.lower() == clean_name.lower()
+              m.name.lower() == clean_inviter.lower()
+              or m.display_name.lower() == clean_inviter.lower()
           ):
             inviter_member = m
             break
@@ -197,21 +222,26 @@ async def on_message(message):
         target_channel = cmd_channel if cmd_channel else message.channel
 
         if success:
+          # Texte du nouveau membre à afficher proprement
+          invited_text = (
+              invited_member.mention if invited_member else left_part
+          )
+
           embed = discord.Embed(
               title="🎉 Nouveau Membre Invité !",
               description=(
                   f"Bien joué {inviter_member.mention} !\n\n✅ **+{invite_reward}"
-                  " coin(s)** ajoutés pour l'invitation d'un nouveau joueur."
+                  f" coin(s)** ajoutés pour l'invitation de"
+                  f" {invited_text}.\n👋 Bienvenue à lui !"
               ),
               color=discord.Color.gold(),
           )
           if new_balance is not None:
             embed.add_field(
-                name="💰 Nouveau Solde",
+                name="💰 Nouveau Solde de l'inviteur",
                 value=f"**{new_balance}** pièces",
                 inline=False,
             )
-          # Ajout du logo du serveur en bas à droite du footer
           embed.set_footer(
               text="Opex Wardogs & Squad • Système d'Invitation",
               icon_url=server_icon,
