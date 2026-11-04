@@ -109,7 +109,7 @@ class AirdropView(View):
         user.id, self.reward_amount
     )
 
-    # Désactive le bouton dans le chat actuel
+    # Désactive le bouton
     button.disabled = True
     button.label = f'Récupéré par {user.display_name} !'
     button.style = discord.ButtonStyle.secondary
@@ -135,10 +135,9 @@ class AirdropView(View):
           icon_url=self.server_icon_url,
       )
 
-      # Réponse éphémère au joueur qui clique pour confirmation instantanée
+      # Notification discrète à celui qui clique
       await interaction.response.send_message(
-          '✅ Tu as ouvert le coffre avec succès ! L'annonce a été envoyée'
-          ' dans le salon vote.',
+          "✅ Coffre ouvert ! L'annonce a été envoyée dans le salon vote.",
           ephemeral=True,
       )
 
@@ -174,6 +173,31 @@ async def on_message(message):
 
   guild = message.guild
   server_icon = guild.icon.url if guild and guild.icon else None
+
+  # ==========================================
+  # COMMANDE DE TEST FORCEE : !testdrop
+  # ==========================================
+  if full_text.lower() == '!testdrop':
+    airdrop_embed = discord.Embed(
+        title='📦 UN COFFRE MYSTÈRE EST APPARU ! [TEST]',
+        description=(
+            'Un parachutage de ravitaillement vient de tomber dans le chat'
+            ' !\n\nClique vite sur le bouton ci-dessous pour récupérer **5'
+            ' pièce(s)** !'
+        ),
+        color=discord.Color.purple(),
+    )
+    airdrop_embed.set_footer(
+        text='Opex Wardogs & Squad • Drop Aléatoire', icon_url=server_icon
+    )
+
+    view = AirdropView(
+        reward_amount=5,
+        server_icon_url=server_icon,
+        vote_channel_id=VOTE_CHANNEL_ID,
+    )
+    await message.channel.send(embed=airdrop_embed, view=view)
+    return
 
   # ==========================================
   # 1. GESTION DES VOTES (Top-Serveurs)
