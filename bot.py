@@ -47,6 +47,7 @@ jackpot_pool = 0  # Cagnotte de départ
 # Variables globales pour la Guerre des Équipes
 team_members = {}  # { user_id: "Rouge" | "Vert" | "Bleu" }
 team_votes = {"Rouge": 0, "Vert": 0, "Bleu": 0}
+user_points = {}  # { user_id: points_rapportes_par_le_joueur }
 
 ROLE_ROUGE_NAME = "Équipe Rouge"
 ROLE_VERT_NAME = "Équipe Verte"
@@ -96,7 +97,6 @@ class TeamSelectionView(View):
       self, interaction: discord.Interaction, chosen_team: str
   ):
     global team_members
-    # Répondre immédiatement en différé pour éviter l'erreur de délai Discord
     await interaction.response.defer(ephemeral=True)
 
     user = interaction.user
@@ -354,7 +354,7 @@ async def on_message(message):
   if message.author.id == client.user.id:
     return
 
-  global jackpot_pool, lottery_tickets, team_members, team_votes
+  global jackpot_pool, lottery_tickets, team_members, team_votes, user_points
 
   full_text = message.content.strip()
   if message.embeds:
@@ -409,7 +409,6 @@ async def on_message(message):
 
   # ==========================================
   # COMMANDE ADMIN : !resetteams
-  # Réinitialise les équipes, retire les rôles et remet les points à zéro
   # ==========================================
   if full_text.lower() == "!resetteams":
     if message.author.guild_permissions.manage_guild:
@@ -417,7 +416,6 @@ async def on_message(message):
       role_vert = discord.utils.get(guild.roles, name=ROLE_VERT_NAME)
       role_bleu = discord.utils.get(guild.roles, name=ROLE_BLEU_NAME)
 
-      # Retirer les rôles d'équipe à tous les membres du serveur qui les ont
       for member in guild.members:
         roles_to_remove = [
             r
@@ -430,14 +428,98 @@ async def on_message(message):
           except Exception:
             pass
 
-      # Vider les dictionnaires et compteurs
       team_members.clear()
+      user_points.clear()
       team_votes = {"Rouge": 0, "Vert": 0, "Bleu": 0}
 
       await message.channel.send(
           "🔄 **Réinitialisation des équipes réussie !** Tous les rôles ont été"
           " retirés et les points remis à zéro."
       )
+    else:
+      await message.channel.send(
+          "❌ Tu n'as pas la permission d'utiliser cette commande.",
+          delete_after=5,
+      )
+    return
+
+  # ==========================================
+  # COMMANDE ADMIN : !finsemaine (Clôture automatique)
+  # ==========================================
+  if full_text.lower() == "!finsemaine":
+    if message.author.guild_permissions.manage_guild:
+      winning_team = max(team_votes, key=team_votes.get)
+      winning_score = team_votes[winning_team]
+
+      if winning_score == 0:
+        await message.channel.send(
+            "⚠️ Aucune équipe n'a marqué de points cette semaine ! Fin de"
+            " semaine annulée."
+        )
+        return
+
+      winners_summary = []
+      for uid, team in team_members.items():
+        if team == winning_team:
+          points_earned = user_points.get(uid, 0)
+          if points_earned > 0:
+            success, new_balance, error = await add_money_unbelievaboat(
+                uid, points_earned
+            )
+            if success:
+              winners_summary.append(f"• <@{uid}> : **+{points_earned}** pièces")
+
+      desc = (
+          f"🏆 L'**Équipe {winning_team}** remporte la guerre cette semaine avec"
+          f" un total de **{winning_score} points** !\n\n"
+      )
+      if winners_summary:
+        desc += (
+            "**💰 Bonus distribués aux membres (basés sur leur"
+            " participation) :**\n"
+            + "\n".join(winners_summary)
+        )
+      else:
+        desc += "Aucun membre n'avait de points individuels à récupérer."
+
+      embed = discord.Embed(
+          title="🏁 RÉSULTATS DE LA SEMAINE !",
+          description=desc,
+          color=discord.Color.gold(),
+      )
+      embed.set_footer(
+          text="Opex Wardogs & Squad • Fin de saison", icon_url=server_icon
+      )
+
+      vote_channel = client.get_channel(VOTE_CHANNEL_ID)
+      target_channel = vote_channel if vote_channel else message.channel
+      await target_channel.send(embed=embed)
+
+      if vote_channel and message.channel.id != VOTE_CHANNEL_ID:
+        await message.channel.send(
+            "✅ Résultats annoncés et pièces distribuées dans le salon de vote !"
+        )
+
+      # Nettoyage des rôles et des variables
+      role_rouge = discord.utils.get(guild.roles, name=ROLE_ROUGE_NAME)
+      role_vert = discord.utils.get(guild.roles, name=ROLE_VERT_NAME)
+      role_bleu = discord.utils.get(guild.roles, name=ROLE_BLEU_NAME)
+
+      for member in guild.members:
+        roles_to_remove = [
+            r
+            for r in [role_rouge, role_vert, role_bleu]
+            if r and r in member.roles
+        ]
+        if roles_to_remove:
+          try:
+            await member.remove_roles(*roles_to_remove)
+          except Exception:
+            pass
+
+      team_members.clear()
+      user_points.clear()
+      team_votes = {"Rouge": 0, "Vert": 0, "Bleu": 0}
     else:
       await message.channel.send(
           "❌ Tu n'as pas la permission d'utiliser cette commande.",
@@ -631,6 +713,7 @@ async def on_message(message):
           team_msg = ""
           if voter_team:
             team_votes[voter_team] += 1
+            user_points[member.id] = user_points.get(member.id, 0) + 1
             team_msg = (
                 f"\n⚔️ **+1 Point** ajouté pour l'**Équipe {voter_team}** !"
             )
@@ -727,6 +810,9 @@ async def on_message(message):
         team_invite_msg = ""
         if inviter_team:
           team_votes[inviter_team] += 2
+          user_points[inviter_member.id] = (
+              user_points.get(inviter_member.id, 0) + 2
+          )
           team_invite_msg = (
               f"\n⚔️ **+2 Points** ajoutés à l'**Équipe {inviter_team}** !"
           )
