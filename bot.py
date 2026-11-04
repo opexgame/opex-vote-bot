@@ -6,7 +6,7 @@ import aiohttp
 import discord
 from flask import Flask
 
-# Serveur Flask pour maintenir le bot actif sur Render free tier
+# Serveur Flask pour maintenir le bot actif sur Render
 app = Flask('')
 
 
@@ -50,7 +50,7 @@ def get_current_vote_reward() -> int:
 
 
 async def add_money_unbelievaboat(user_id: int, amount: int = 1):
-  """Crédite le solde UnbelievaBoat de l'utilisateur."""
+  """Crédite le solde et récupère le nouveau solde cash."""
   url = f'https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}'
   headers = {
       'Authorization': UNBELIEVABOAT_TOKEN,
@@ -60,9 +60,16 @@ async def add_money_unbelievaboat(user_id: int, amount: int = 1):
 
   async with aiohttp.ClientSession() as session:
     async with session.patch(url, json=payload, headers=headers) as resp:
-      text = await resp.text()
-      print(f'[API Response] Status: {resp.status} | Body: {text}')
-      return resp.status == 200, text
+      if resp.status == 200:
+        try:
+          data = await resp.json()
+          new_cash = data.get("cash", None)
+          return True, new_cash, None
+        except Exception:
+          return True, None, None
+      else:
+        text = await resp.text()
+        return False, None, text
 
 
 @client.event
@@ -72,14 +79,10 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-  # On ne réagit pas aux messages envoyés par notre propre bot
   if message.author.id == client.user.id:
     return
 
-  # Récupération du texte brut du message
   full_text = message.content.strip()
-
-  # Si le message vient d'un bot ou contient un embed, on extrait aussi le texte de l'embed
   if message.embeds:
     for embed in message.embeds:
       if embed.description:
@@ -98,11 +101,9 @@ async def on_message(message):
         guild = message.guild
         member = None
 
-        # Recherche si une mention directe existe dans le message
         if message.mentions:
           member = message.mentions[0]
 
-        # Sinon recherche par nom/pseudo
         if not member:
           for m in guild.members:
             if (
@@ -114,14 +115,30 @@ async def on_message(message):
 
         if member:
           reward_amount = get_current_vote_reward()
-          success, error_text = await add_money_unbelievaboat(
+          success, new_balance, error_text = await add_money_unbelievaboat(
               member.id, reward_amount
           )
+
           if success:
-            await message.channel.send(
-                f"✅ {reward_amount} coin(s) ajouté(s) sur le shop"
-                f" UnbelievaBoat pour {member.mention} !"
+            # Création d'un beau Embed stylisé
+            embed = discord.Embed(
+                title="🪙 Récompense de Vote Validée !",
+                description=(
+                    f"Merci {member.mention} d'avoir voté pour le"
+                    f" serveur !\n\n✅ **+{reward_amount} coin(s)** ajoutés sur"
+                    " ton compte."
+                ),
+                color=discord.Color.green(),
             )
+            if new_balance is not None:
+              embed.add_field(
+                  name="💰 Nouveau Solde",
+                  value=f"**{new_balance}** pièces",
+                  inline=False,
+              )
+            embed.set_footer(text="Opex Wardogs & Squad • Système de Vote")
+
+            await message.channel.send(embed=embed)
           else:
             await message.channel.send(
                 f"⚠️ Erreur API Vote ({error_text}) pour {member.mention}."
@@ -140,7 +157,6 @@ async def on_message(message):
       guild = message.guild
       inviter_member = None
 
-      # 1. Verification des mentions Discord
       if message.mentions:
         for mention in message.mentions:
           if (
@@ -151,7 +167,6 @@ async def on_message(message):
             inviter_member = mention
             break
 
-      # 2. Verification par nom
       if not inviter_member:
         clean_name = (
             inviter_raw.replace("<@", "")
@@ -169,8 +184,8 @@ async def on_message(message):
             break
 
       if inviter_member:
-        invite_reward = 2  # 2 pièces par invitation
-        success, error_text = await add_money_unbelievaboat(
+        invite_reward = 2
+        success, new_balance, error_text = await add_money_unbelievaboat(
             inviter_member.id, invite_reward
         )
 
@@ -178,11 +193,27 @@ async def on_message(message):
         target_channel = cmd_channel if cmd_channel else message.channel
 
         if success:
-          await target_channel.send(
-              f"🎉 {invite_reward} coin(s) ajoutés sur le shop UnbelievaBoat"
-              f" pour {inviter_member.mention} (Invitation d'un nouveau"
-              " membre) !"
+          # Beau Embed stylisé pour l'invitation
+          embed = discord.Embed(
+              title="🎉 Nouveau Membre Invité !",
+              description=(
+                  f"Bien joué {inviter_member.mention} !\n\n✅ **+{invite_reward}"
+                    " coin(s)** ajoutés pour l'invitation d'un nouveau"
+                  " joueur."
+              ),
+              color=discord.Color.gold(),
           )
+          if new_balance is not None:
+            embed.add_field(
+                name="💰 Nouveau Solde",
+                value=f"**{new_balance}** pièces",
+                inline=False,
+            )
+          embed.set_footer(
+              text="Opex Wardogs & Squad • Système d'Invitation"
+          )
+
+          await target_channel.send(embed=embed)
         else:
           print(f"[Erreur API Invite] {error_text}")
       else:
