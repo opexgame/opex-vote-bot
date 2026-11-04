@@ -86,7 +86,7 @@ async def add_money_unbelievaboat(user_id: int, amount: int = 1):
         return False, None, text
 
 
-# Class pour la sélection de faction (Équipes)
+# Class pour la sélection de faction (Équipes) avec bouton de rafraîchissement et verrouillage
 class TeamSelectionView(View):
 
   def __init__(self, server_icon_url: str):
@@ -109,15 +109,22 @@ class TeamSelectionView(View):
 
     current_user_team = team_members.get(user.id)
 
-    if current_user_team == chosen_team:
-      await interaction.followup.send(
-          f"⚠️ Tu es déjà dans l'**Équipe {chosen_team}** !", ephemeral=True
-      )
+    # 1. Empêcher de changer de team si déjà dans une équipe
+    if current_user_team:
+      if current_user_team == chosen_team:
+        await interaction.followup.send(
+            f"⚠️ Tu es déjà dans l'**Équipe {chosen_team}** !", ephemeral=True
+        )
+      else:
+        await interaction.followup.send(
+            f"❌ Tu as déjà choisi l'**Équipe {current_user_team}** ! Tu ne"
+            " peux pas changer de camp avant la fin de la semaine.",
+            ephemeral=True,
+        )
       return
 
+    # 2. Vérification de l'équilibre
     temp_counts = counts.copy()
-    if current_user_team:
-      temp_counts[current_user_team] -= 1
     temp_counts[chosen_team] += 1
 
     min_team_size = min(temp_counts.values())
@@ -132,17 +139,12 @@ class TeamSelectionView(View):
       )
       return
 
+    # Enregistrement de l'équipe
     team_members[user.id] = chosen_team
 
     role_rouge = discord.utils.get(guild.roles, name=ROLE_ROUGE_NAME)
     role_vert = discord.utils.get(guild.roles, name=ROLE_VERT_NAME)
     role_bleu = discord.utils.get(guild.roles, name=ROLE_BLEU_NAME)
-
-    roles_to_remove = [
-        r for r in [role_rouge, role_vert, role_bleu] if r in user.roles
-    ]
-    if roles_to_remove:
-      await user.remove_roles(*roles_to_remove)
 
     target_role = None
     if chosen_team == "Rouge":
@@ -156,8 +158,6 @@ class TeamSelectionView(View):
       await user.add_roles(target_role)
 
     counts[chosen_team] += 1
-    if current_user_team:
-      counts[current_user_team] -= 1
 
     embed = discord.Embed(
         title="⚔️ GUERRE DES ÉQUIPES - Choisis ta Faction !",
@@ -181,7 +181,8 @@ class TeamSelectionView(View):
 
     await interaction.message.edit(embed=embed, view=self)
     await interaction.followup.send(
-        f"✅ Tu as rejoint l'**Équipe {chosen_team}** avec succès !",
+        f"✅ Tu as rejoint l'**Équipe {chosen_team}** avec succès ! Ton choix est"
+        " verrouillé pour la semaine.",
         ephemeral=True,
     )
 
@@ -208,6 +209,42 @@ class TeamSelectionView(View):
   )
   async def btn_bleu(self, interaction: discord.Interaction, button: Button):
     await self.process_team_join(interaction, "Bleu")
+
+  @discord.ui.button(
+      label="🔄", style=discord.ButtonStyle.secondary, custom_id="refresh_teams"
+  )
+  async def btn_refresh(self, interaction: discord.Interaction, button: Button):
+    await interaction.response.defer(ephemeral=True)
+
+    counts = {"Rouge": 0, "Vert": 0, "Bleu": 0}
+    for t in team_members.values():
+      if t in counts:
+        counts[t] += 1
+
+    embed = discord.Embed(
+        title="⚔️ GUERRE DES ÉQUIPES - Choisis ta Faction !",
+        description=(
+            "Rejoins une équipe pour participer au classement hebdomadaire"
+            " !\nL'équipe avec le plus de points à la fin de la semaine se"
+            " partagera la cagnotte.\n\n"
+            f"🔴 **Équipe Rouge :** `{counts['Rouge']}` membre(s) | Points:"
+            f" `{team_votes['Rouge']}`\n"
+            f"🟢 **Équipe Verte :** `{counts['Vert']}` membre(s) | Points:"
+            f" `{team_votes['Vert']}`\n"
+            f"🔵 **Équipe Bleue :** `{counts['Bleu']}` membre(s) | Points:"
+            f" `{team_votes['Bleu']}`"
+        ),
+        color=discord.Color.dark_theme(),
+    )
+    embed.set_footer(
+        text="Opex Wardogs & Squad • Équilibrage Automatique",
+        icon_url=self.server_icon_url,
+    )
+
+    await interaction.message.edit(embed=embed, view=self)
+    await interaction.followup.send(
+        "🔄 Les scores et effectifs ont été rafraîchis !", ephemeral=True
+    )
 
 
 # Class pour gérer le bouton d'Airdrop
