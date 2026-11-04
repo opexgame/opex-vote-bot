@@ -5,6 +5,7 @@ import threading
 from zoneinfo import ZoneInfo
 import aiohttp
 import discord
+from discord.ext import tasks
 from discord.ui import Button, View
 from flask import Flask
 
@@ -38,12 +39,15 @@ intents.members = True
 
 client = discord.Client(intents=intents)
 
+# Variables globales pour la loterie
+lottery_tickets = {}  # { user_id: nombre_de_tickets }
+TICKET_PRICE = 5
+jackpot_pool = 0  # Cagnotte de départ fixée à 0 (tu l'ajustes avec !addcagnotte)
+
 
 def get_current_vote_reward() -> int:
-  """Retourne 2 pièces du vendredi 19h au dimanche minuit (heure française), sinon 1 pièce."""
   now = datetime.now(ZoneInfo("Europe/Paris"))
   weekday = now.weekday()
-
   if weekday == 4 and now.hour >= 19:
     return 2
   if weekday in (5, 6):
@@ -52,7 +56,6 @@ def get_current_vote_reward() -> int:
 
 
 async def add_money_unbelievaboat(user_id: int, amount: int = 1):
-  """Crédite le solde et récupère le nouveau solde cash."""
   url = f"https://unbelievaboat.com/api/v1/guilds/{GUILD_ID}/users/{user_id}"
   headers = {
       "Authorization": UNBELIEVABOAT_TOKEN,
@@ -150,6 +153,66 @@ class AirdropView(View):
       )
 
 
+# Class pour gérer le bouton d'achat de ticket de loterie
+class LotteryView(View):
+
+  def __init__(self, server_icon_url: str):
+    super().__init__(timeout=None)
+    self.server_icon_url = server_icon_url
+
+  @discord.ui.button(
+      label="🎟️ Acheter un ticket (5 pièces)",
+      style=discord.ButtonStyle.primary,
+      custom_id="buy_lottery_ticket",
+  )
+  async def buy_ticket(self, interaction: discord.Interaction, button: Button):
+    global lottery_tickets, jackpot_pool
+    user = interaction.user
+
+    # Retirer 5 pièces au joueur via UnbelievaBoat
+    success, new_balance, error_text = await add_money_unbelievaboat(
+        user.id, -TICKET_PRICE
+    )
+
+    if success:
+      lottery_tickets[user.id] = lottery_tickets.get(user.id, 0) + 1
+      jackpot_pool += TICKET_PRICE
+
+      participants_text = ""
+      for uid, count in lottery_tickets.items():
+        participants_text += f"• <@{uid}> : **{count}** ticket(s)\n"
+
+      if not participants_text:
+        participants_text = "Aucun participant pour l'instant. Soyez le premier !"
+
+      embed = discord.Embed(
+          title="🎟️ LOTERIE HEBDOMADAIRE - Tente ta chance !",
+          description=(
+              "Clique sur le bouton ci-dessous pour acheter **1 ticket** pour"
+              f" **{TICKET_PRICE} pièces** !\n\n💰 **Jackpot en jeu :**"
+              f" `__{jackpot_pool}__` pièces\n\n👥 **Participants éligibles"
+              f" :**\n{participants_text}"
+          ),
+          color=discord.Color.blurple(),
+      )
+      embed.set_footer(
+          text="Opex Wardogs & Squad • Tirage Manuel",
+          icon_url=self.server_icon_url,
+      )
+
+      await interaction.message.edit(embed=embed, view=self)
+
+      await interaction.response.send_message(
+          "✅ Achat réussi ! Ton ticket a bien été enregistré.", ephemeral=True
+      )
+    else:
+      await interaction.response.send_message(
+          "❌ Achat impossible : Tu n'as pas assez de pièces sur ton compte"
+          " UnbelievaBoat !",
+          ephemeral=True,
+      )
+
+
 @client.event
 async def on_ready():
   print(f"Bot connecté et prêt : {client.user}")
@@ -159,6 +222,8 @@ async def on_ready():
 async def on_message(message):
   if message.author.id == client.user.id:
     return
+
+  global jackpot_pool, lottery_tickets
 
   full_text = message.content.strip()
   if message.embeds:
@@ -170,6 +235,136 @@ async def on_message(message):
 
   guild = message.guild
   server_icon = guild.icon.url if guild and guild.icon else None
+
+  # ==========================================
+  # COMMANDE ADMIN : !tirageloterie
+  # ==========================================
+  if full_text.lower() == "!tirageloterie":
+    if message.author.guild_permissions.manage_guild:
+      if not lottery_tickets:
+        await message.channel.send(
+            "⚠️ Aucun participant n'a encore acheté de ticket pour cette"
+            " loterie !"
+        )
+        return
+
+      pool_list = []
+      for uid, count in lottery_tickets.items():
+        pool_list.extend([uid] * count)
+
+      winner_id = random.choice(pool_list)
+
+      success, new_balance, error_text = await add_money_unbelievaboat(
+          winner_id, jackpot_pool
+      )
+
+      winner_member = guild.get_member(winner_id)
+      winner_mention = (
+          winner_member.mention if winner_member else f"<@{winner_id}>"
+      )
+
+      if success:
+        embed = discord.Embed(
+            title="🎉 RÉSULTAT DE LA LOTERIE ! 🎟️",
+            description=(
+                f"Le tirage au sort vient d'avoir lieu !\n\n👑 Félicitations à"
+                f" {winner_mention} qui remporte le jackpot de"
+                f" **+{jackpot_pool} pièce(s)** !"
+            ),
+            color=discord.Color.gold(),
+        )
+        if new_balance is not None:
+          embed.add_field(
+              name="💰 Nouveau Solde du Gagnant",
+              value=f"**{new_balance}** pièces",
+              inline=False,
+          )
+        embed.set_footer(
+            text="Opex Wardogs & Squad • Loterie du Serveur",
+            icon_url=server_icon,
+        )
+
+        vote_channel = client.get_channel(VOTE_CHANNEL_ID)
+        target_channel = vote_channel if vote_channel else message.channel
+
+        await target_channel.send(embed=embed)
+
+        if vote_channel and message.channel.id != VOTE_CHANNEL_ID:
+          await message.channel.send(
+              "✅ Tirage effectué ! Annonce envoyée dans le salon de vote."
+          )
+
+        # Remise à zéro complète de la cagnotte et des tickets
+        lottery_tickets = {}
+        jackpot_pool = 0
+      else:
+        await message.channel.send(
+            f"⚠️ Erreur API lors du crédit du jackpot : {error_text}"
+        )
+    else:
+      await message.channel.send(
+          "❌ Tu n'as pas la permission d'utiliser cette commande.",
+          delete_after=5,
+      )
+    return
+
+  # ==========================================
+  # COMMANDE ADMIN : !addcagnotte [montant]
+  # ==========================================
+  if full_text.lower().startswith("!addcagnotte"):
+    if message.author.guild_permissions.manage_guild:
+      parts = full_text.split()
+      if len(parts) > 1 and parts[1].isdigit():
+        added_amount = int(parts[1])
+        jackpot_pool += added_amount
+
+        await message.channel.send(
+            f"✅ **+{added_amount} pièces** ont été ajoutées à la cagnotte par le"
+            f" serveur !\n💰 **Nouveau Jackpot :** `{jackpot_pool}` pièces."
+        )
+      else:
+        await message.channel.send(
+            "⚠️ Utilisation correcte : `!addcagnotte 50`", delete_after=6
+        )
+    else:
+      await message.channel.send(
+          "❌ Tu n'as pas la permission d'utiliser cette commande.",
+          delete_after=5,
+      )
+    return
+
+  # ==========================================
+  # COMMANDE ADMIN : !lancerloterie
+  # ==========================================
+  if full_text.lower() == "!lancerloterie":
+    if message.author.guild_permissions.manage_guild:
+      participants_text = (
+          "Aucun participant pour l'instant. Soyez le premier !"
+      )
+
+      embed = discord.Embed(
+          title="🎟️ LOTERIE HEBDOMADAIRE - Tente ta chance !",
+          description=(
+              "Clique sur le bouton ci-dessous pour acheter **1 ticket** pour"
+              f" **{TICKET_PRICE} pièces** !\n\n💰 **Jackpot en jeu :**"
+              f" `__{jackpot_pool}__` pièces\n\n👥 **Participants éligibles"
+              f" :**\n{participants_text}"
+          ),
+          color=discord.Color.blurple(),
+      )
+      embed.set_footer(
+          text="Opex Wardogs & Squad • Tirage Manuel", icon_url=server_icon
+      )
+
+      view = LotteryView(server_icon_url=server_icon)
+      await message.channel.send(embed=embed, view=view)
+      await message.delete()
+    else:
+      await message.channel.send(
+          "❌ Tu n'as pas la permission d'utiliser cette commande.",
+          delete_after=5,
+      )
+    return
 
   # ==========================================
   # COMMANDE DE TEST FORCEE : !testdrop
