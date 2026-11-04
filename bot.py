@@ -42,7 +42,7 @@ client = discord.Client(intents=intents)
 # Variables globales pour la loterie
 lottery_tickets = {}  # { user_id: nombre_de_tickets }
 TICKET_PRICE = 5
-jackpot_pool = 0  # Cagnotte de départ réinitialisée à 0
+jackpot_pool = 0  # Cagnotte de départ
 
 # Variables globales pour la Guerre des Équipes
 team_members = {}  # { user_id: "Rouge" | "Vert" | "Bleu" }
@@ -96,6 +96,9 @@ class TeamSelectionView(View):
       self, interaction: discord.Interaction, chosen_team: str
   ):
     global team_members
+    # Répondre immédiatement en différé pour éviter l'erreur de délai Discord
+    await interaction.response.defer(ephemeral=True)
+
     user = interaction.user
     guild = interaction.guild
 
@@ -107,7 +110,7 @@ class TeamSelectionView(View):
     current_user_team = team_members.get(user.id)
 
     if current_user_team == chosen_team:
-      await interaction.response.send_message(
+      await interaction.followup.send(
           f"⚠️ Tu es déjà dans l'**Équipe {chosen_team}** !", ephemeral=True
       )
       return
@@ -121,7 +124,7 @@ class TeamSelectionView(View):
     target_team_size = temp_counts[chosen_team]
 
     if target_team_size - min_team_size > 1:
-      await interaction.response.send_message(
+      await interaction.followup.send(
           f"❌ L'**Équipe {chosen_team}** est complète pour le moment !\nMerci"
           " de choisir une autre équipe pour garder un nombre de participants"
           " équitable.",
@@ -157,17 +160,17 @@ class TeamSelectionView(View):
       counts[current_user_team] -= 1
 
     embed = discord.Embed(
-        title="⚔️ GUERRE DES ÉQUIPES - Choisis ton Faction !",
+        title="⚔️ GUERRE DES ÉQUIPES - Choisis ta Faction !",
         description=(
             "Rejoins une équipe pour participer au classement hebdomadaire"
             " !\nL'équipe avec le plus de points à la fin de la semaine se"
             " partagera la cagnotte.\n\n"
-            f"🔴 **Équipe Rouge :** `{counts['Rouge']}` membre(s) |"
-            f" Points: `{team_votes['Rouge']}`\n"
-            f"🟢 **Équipe Verte :** `{counts['Vert']}` membre(s) |"
-            f" Points: `{team_votes['Vert']}`\n"
-            f"🔵 **Équipe Bleue :** `{counts['Bleu']}` membre(s) |"
-            f" Points: `{team_votes['Bleu']}`"
+            f"🔴 **Équipe Rouge :** `{counts['Rouge']}` membre(s) | Points:"
+            f" `{team_votes['Rouge']}`\n"
+            f"🟢 **Équipe Verte :** `{counts['Vert']}` membre(s) | Points:"
+            f" `{team_votes['Vert']}`\n"
+            f"🔵 **Équipe Bleue :** `{counts['Bleu']}` membre(s) | Points:"
+            f" `{team_votes['Bleu']}`"
         ),
         color=discord.Color.dark_theme(),
     )
@@ -177,7 +180,7 @@ class TeamSelectionView(View):
     )
 
     await interaction.message.edit(embed=embed, view=self)
-    await interaction.response.send_message(
+    await interaction.followup.send(
         f"✅ Tu as rejoint l'**Équipe {chosen_team}** avec succès !",
         ephemeral=True,
     )
@@ -380,12 +383,12 @@ async def on_message(message):
               "Rejoins une équipe pour participer au classement hebdomadaire"
               " !\nL'équipe avec le plus de points à la fin de la semaine se"
               " partagera la cagnotte.\n\n"
-              f"🔴 **Équipe Rouge :** `{counts['Rouge']}` membre(s) |"
-              f" Points: `{team_votes['Rouge']}`\n"
-              f"🟢 **Équipe Verte :** `{counts['Vert']}` membre(s) |"
-              f" Points: `{team_votes['Vert']}`\n"
-              f"🔵 **Équipe Bleue :** `{counts['Bleu']}` membre(s) |"
-              f" Points: `{team_votes['Bleu']}`"
+              f"🔴 **Équipe Rouge :** `{counts['Rouge']}` membre(s) | Points:"
+              f" `{team_votes['Rouge']}`\n"
+              f"🟢 **Équipe Verte :** `{counts['Vert']}` membre(s) | Points:"
+              f" `{team_votes['Vert']}`\n"
+              f"🔵 **Équipe Bleue :** `{counts['Bleu']}` membre(s) | Points:"
+              f" `{team_votes['Bleu']}`"
           ),
           color=discord.Color.dark_theme(),
       )
@@ -397,6 +400,44 @@ async def on_message(message):
       view = TeamSelectionView(server_icon_url=server_icon)
       await message.channel.send(embed=embed, view=view)
       await message.delete()
+    else:
+      await message.channel.send(
+          "❌ Tu n'as pas la permission d'utiliser cette commande.",
+          delete_after=5,
+      )
+    return
+
+  # ==========================================
+  # COMMANDE ADMIN : !resetteams
+  # Réinitialise les équipes, retire les rôles et remet les points à zéro
+  # ==========================================
+  if full_text.lower() == "!resetteams":
+    if message.author.guild_permissions.manage_guild:
+      role_rouge = discord.utils.get(guild.roles, name=ROLE_ROUGE_NAME)
+      role_vert = discord.utils.get(guild.roles, name=ROLE_VERT_NAME)
+      role_bleu = discord.utils.get(guild.roles, name=ROLE_BLEU_NAME)
+
+      # Retirer les rôles d'équipe à tous les membres du serveur qui les ont
+      for member in guild.members:
+        roles_to_remove = [
+            r
+            for r in [role_rouge, role_vert, role_bleu]
+            if r and r in member.roles
+        ]
+        if roles_to_remove:
+          try:
+            await member.remove_roles(*roles_to_remove)
+          except Exception:
+            pass
+
+      # Vider les dictionnaires et compteurs
+      team_members.clear()
+      team_votes = {"Rouge": 0, "Vert": 0, "Bleu": 0}
+
+      await message.channel.send(
+          "🔄 **Réinitialisation des équipes réussie !** Tous les rôles ont été"
+          " retirés et les points remis à zéro."
+      )
     else:
       await message.channel.send(
           "❌ Tu n'as pas la permission d'utiliser cette commande.",
@@ -586,7 +627,6 @@ async def on_message(message):
               member.id, reward_amount
           )
 
-          # Ajouter 1 point à l'équipe du joueur qui vote
           voter_team = team_members.get(member.id)
           team_msg = ""
           if voter_team:
@@ -683,7 +723,6 @@ async def on_message(message):
             inviter_member.id, invite_reward
         )
 
-        # Ajouter 2 points à l'équipe de l'inviteur
         inviter_team = team_members.get(inviter_member.id)
         team_invite_msg = ""
         if inviter_team:
